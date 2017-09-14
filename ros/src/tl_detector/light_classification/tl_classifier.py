@@ -142,13 +142,17 @@ class TLClassifier(object):
 
         return color
 
-    def get_classification_v3(self, image):
+    def get_classification_v3(self, cv_image):
 
         image_tensor = self.detection_graph.get_tensor_by_name('image_tensor:0')
         detection_boxes = self.detection_graph.get_tensor_by_name('detection_boxes:0')
         detection_scores = self.detection_graph.get_tensor_by_name('detection_scores:0')
         detection_classes = self.detection_graph.get_tensor_by_name('detection_classes:0')
         num_detections = self.detection_graph.get_tensor_by_name('num_detections:0')
+
+        # convert from cv2 to PIL
+        cv2_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(cv2_rgb)
 
         (im_width, im_height) = image.size
         image_np = np.array(image.getdata()).reshape((im_height, im_width, 3)).astype(np.uint8)
