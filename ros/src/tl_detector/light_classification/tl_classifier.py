@@ -210,9 +210,9 @@ class TLClassifier(object):
                 if light_colors[max_i] > 0.05:
                     if max_i == 0:
                         return TrafficLight.RED
-                    elif max_i == 1:
-                        return TrafficLight.YELLOW
-                    elif max_i == 2:
-                        return TrafficLight.GREEN
+                    # elif max_i == 1:
+                    #     return TrafficLight.YELLOW
+                    # elif max_i == 2:
+                    #     return TrafficLight.GREEN
 
         return TrafficLight.UNKNOWN
