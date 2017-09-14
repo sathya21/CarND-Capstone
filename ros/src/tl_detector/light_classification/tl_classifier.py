@@ -50,8 +50,12 @@ class TLClassifier(object):
         self.graph = tensorflow.get_default_graph()
 
     def load_ssd_model(self):
-        PATH_TO_CKPT = 'frozen_inference_graph_sim.pb'
-        PATH_TO_LABELS = 'tl_label_map.pbtxt'
+        rospack = rospkg.RosPack()
+        path_v = rospack.get_path('styx')
+        PATH_TO_CKPT = path_v + \
+                     '/../tl_detector/light_classification/frozen_inference_graph_sim.pb'
+        PATH_TO_LABELS = path_v + \
+                     '/../tl_detector/light_classification/tl_label_map.pbtxt'
         self.detection_graph = tensorflow.Graph()
         with self.detection_graph.as_default():
             od_graph_def = tensorflow.GraphDef()
