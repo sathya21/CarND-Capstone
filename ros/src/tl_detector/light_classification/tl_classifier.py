@@ -155,7 +155,7 @@ class TLClassifier(object):
         image = Image.fromarray(cv2_rgb)
 
         (im_width, im_height) = image.size
-        image_np = np.array(image.getdata()).reshape((im_height, im_width, 3)).astype(np.uint8)
+        image_np = np.array(image)
         image_np_expanded = np.expand_dims(image_np, axis=0)
 
         # Actual detection.
