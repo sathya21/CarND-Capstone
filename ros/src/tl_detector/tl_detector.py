@@ -225,7 +225,7 @@ class TLDetector(object):
         if self.check_inside_image(left,top) and self.check_inside_image(bottom, right):
             roi = cv_image[top:bottom, left:right]
             #self.deb_img.publish(self.bridge.cv2_to_imgmsg(crop, "bgr8"))
-            tlState = self.light_classifier.get_classification(cv_image)
+            tlState = self.light_classifier.get_classification_v3(cv_image)
 
             # Publish the cropped image on a ROS topic for debug purposes
             if DEBUG:
