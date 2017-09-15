@@ -13,7 +13,7 @@ import math
 import numpy as np
 import yaml
 
-STATE_COUNT_THRESHOLD = 3
+STATE_COUNT_THRESHOLD = 6
 MAX_DIST              = 100.0
 DEBUG                 = False
 
@@ -92,6 +92,7 @@ class TLDetector(object):
         if self.state != state:
             self.state_count = 0
             self.state = state
+            self.last_wp = -1
         elif self.state_count >= STATE_COUNT_THRESHOLD:
             self.last_state = self.state
             light_wp = light_wp if state == TrafficLight.RED else -1
@@ -120,10 +121,11 @@ class TLDetector(object):
             waypoints = self.waypoints
             dl = lambda a, b: (a.x - b.x) ** 2 + (a.y - b.y) ** 2
             for i in range(len(waypoints)):
-                dist = dl(pose, waypoints[i].pose.pose.position)
-                if dist < closest_len:
-                    closest_len = dist
-                    closest_wp_i = i
+                if pose.x <= waypoints[i].pose.pose.position.x:
+                    dist = dl(pose, waypoints[i].pose.pose.position)
+                    if dist < closest_len:
+                        closest_len = dist
+                        closest_wp_i = i
         return closest_wp_i
 
 
@@ -222,10 +224,12 @@ class TLDetector(object):
         right  = int(x + w_img)
 
         tlState = TrafficLight.UNKNOWN
+        tlState = self.light_classifier.get_classification_v2(cv_image)
+
         if self.check_inside_image(left,top) and self.check_inside_image(bottom, right):
-            roi = cv_image[top:bottom, left:right]
+            #roi = cv_image[top:bottom, left:right]
             #self.deb_img.publish(self.bridge.cv2_to_imgmsg(crop, "bgr8"))
-            tlState = self.light_classifier.get_classification_v3(cv_image)
+            #tlState = self.light_classifier.get_classification_v3(cv_image)
 
             # Publish the cropped image on a ROS topic for debug purposes
             if DEBUG:
@@ -236,8 +240,9 @@ class TLDetector(object):
         #Get classification
         if DEBUG:
             rospy.loginfo('tlState: {}'.format(tlState))
+        #rospy.loginfo('tlState: {}'.format(light.state))
 
-        return tlState
+        return light.state #tlState
 
     def publish_roi_image(self, img):
 

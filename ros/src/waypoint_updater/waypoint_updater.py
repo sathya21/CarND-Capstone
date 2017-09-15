@@ -46,7 +46,6 @@ class WaypointUpdater(object):
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
         self.is_signal_red_pub = rospy.Publisher('is_signal_red', Bool, queue_size=1)
-
         self.publish()
 
         rospy.spin()
@@ -56,23 +55,19 @@ class WaypointUpdater(object):
         while not rospy.is_shutdown():
             if (self.cur_pose is not None) and (self.base_waypoints is not None):
                 next_wp_i = self.next_waypoint(self.cur_pose.pose, self.base_waypoints.waypoints)
-                if self.is_signal_red == True and \
-                   self.red_wp_i and self.red_wp_i > next_wp_i:
+                if self.is_signal_red == True and self.red_wp_i > next_wp_i:
                      red_wp_i = self.red_wp_i
-                     sp_wp = [next_wp_i, red_wp_i]
+                     sp_wp = [next_wp_i, red_wp_i-1]
                      next_wp_velocity = self.get_waypoint_velocity(self.base_waypoints.waypoints[next_wp_i])
         	     sp_v = [next_wp_velocity, 0.0]
                      f_sp = interp1d(sp_wp, sp_v)
-	             for  p in range(next_wp_i, red_wp_i):
-                    	self.set_waypoint_velocity(self.base_waypoints.waypoints,
-                                                    next_wp_i,f_sp(p))
-                     if self.red_wp_i:
-		         self.set_waypoint_velocity(self.base_waypoints.waypoints, red_wp_i,0)
+	             for  p in range(next_wp_i, red_wp_i-1):
+                    	self.set_waypoint_velocity(self.base_waypoints.waypoints, p, f_sp(p))
+		     self.set_waypoint_velocity(self.base_waypoints.waypoints, red_wp_i,0)
                      if DEBUG:
                          rospy.loginfo("set velocity to 0")
                 elif self.move_car == True:
-                     self.set_waypoint_velocity(self.base_waypoints.waypoints,next_wp_i, 4.5)
-                     self.move_car = False
+                     self.set_waypoint_velocity(self.base_waypoints.waypoints, next_wp_i, 6)
                 next_waypoints = self.base_waypoints.waypoints[next_wp_i:next_wp_i+LOOKAHEAD_WPS]
 
                 # publish
@@ -100,6 +95,7 @@ class WaypointUpdater(object):
         if msg.data  >=  0: 
             self.is_signal_red = True
 	    self.red_wp_i = msg.data
+            self.move_car = False
             if DEBUG:
                 rospy.loginfo("data %s signal  = true", msg.data)
         else:
