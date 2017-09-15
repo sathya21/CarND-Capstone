@@ -38,14 +38,16 @@ class TLClassifier(object):
         self.upper_red_2 = np.array([180, 255, 255], dtype="uint8")
 
     def create_model(self):
-        self.model = Sequential()
-        self.model.add(Dense(200, activation='relu', input_shape=(7800,)))
-        self.model.add(Dense(4, activation='softmax'))
+        self.model =  Sequential()
+        #self.model.add(Dense(200, activation='relu', input_shape=(7800,)))
+        #self.model.add(Dense(4, activation='softmax'))
+        self.model.add(Dense(200, activation='relu', input_shape=(30000,)))
+        self.model.add(Dense(3, activation='softmax'))
 
         rospack = rospkg.RosPack()
         path_v = rospack.get_path('styx')
-        model_file = path_v + \
-                     '/../tl_detector/light_classification/tl-classifier-model.h5'
+        model_file = path_v+ \
+               '/../tl_detector/light_classification/tl-classifier-model-sim.h5'
         self.model.load_weights(model_file)
         self.graph = tensorflow.get_default_graph()
 
@@ -66,11 +68,6 @@ class TLClassifier(object):
 
             self.sess = tensorflow.Session(graph=self.detection_graph)
 
-    def _get_color_class(self, classes):
-        for i in range(len(classes)):
-            if classes[i] == 1:
-                return self.colors[i]
-        return TrafficLight.UNKNOWN
 
     def get_classification_v2(self, image):
         """Determines the color of the traffic light in the image
@@ -82,13 +79,17 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        image_new = image[250:600, 0:1300]
-        dim = (100, 26)
+        #image_new = image[250:600, 0:1300]
+        image_new = image[100:700, 50:550]
+        #dim = (100, 26)
+        r = 100.0 / image_new.shape[1]
+        dim = (100, int(image_new.shape[0] * r))
         resized = cv2.resize(image_new, dim)
         image_data = np.array([resized.flatten().tolist()])
+        image_data /= 255
         with self.graph.as_default():
-            classes = self.model.predict(image_data, batch_size=1)
-            return self._get_color_class(classes[0])
+             classes = self.model.predict(image_data, batch_size=1)
+             return self.colors[np.argmax(classes[0])]
         return TrafficLight.UNKNOWN
 
     def get_classification(self, image):
