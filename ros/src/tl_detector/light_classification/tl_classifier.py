@@ -54,8 +54,17 @@ class TLClassifier(object):
     def load_ssd_model(self):
         rospack = rospkg.RosPack()
         path_v = rospack.get_path('styx')
+
+        # SIMULATOR VALUES
+
         PATH_TO_CKPT = path_v + \
                      '/../tl_detector/light_classification/frozen_inference_graph_sim.pb'
+
+        # REAL WORLD VALUES
+
+        # PATH_TO_CKPT = path_v + \
+        #              '/../tl_detector/light_classification/frozen_inference_graph_real.pb'
+
         PATH_TO_LABELS = path_v + \
                      '/../tl_detector/light_classification/tl_label_map.pbtxt'
         self.detection_graph = tensorflow.Graph()
@@ -190,23 +199,46 @@ class TLClassifier(object):
                 img_light_gray = img_light.convert('L')
 
                 img_light_bw_np = np.asarray(img_light_gray).copy()
+
+                # SIMULATOR VALUES
+
                 img_light_bw_np[img_light_bw_np < 100] = 0  # Black
                 img_light_bw_np[img_light_bw_np >= 100] = 255  # White
+
+                # REAL WORLD VALUES
+
+                # img_light_bw_np[img_light_bw_np < 190] = 0  # Black
+                # img_light_bw_np[img_light_bw_np >= 190] = 255  # White
+
                 img_light_bw = Image.fromarray(img_light_bw_np)
                 w, h = img_light_bw.size
 
                 light_colors = []  # red, yellow, green
                 single_light_pixel_count = int(h * w / 3)
 
-                nzCountRed = np.count_nonzero(np.array(img_light_bw)[0:int(h / 3), :]) / (single_light_pixel_count * 1.0)
+                # SIMULATOR VALUES
+
+                nzCountRed = np.count_nonzero(np.array(img_light_bw)[int(h / 10):int(h / 3), :]) / (
+                single_light_pixel_count * 1.0)
                 nzCountYellow = np.count_nonzero(np.array(img_light_bw)[int(h / 3):int(h * 2 / 3), :]) / (
-                    single_light_pixel_count * 1.0)
-                nzCountGreen = np.count_nonzero(np.array(img_light_bw)[int(h * 2 / 3):h, :]) / (
-                    single_light_pixel_count * 1.0)
+                single_light_pixel_count * 1.0)
+                nzCountGreen = np.count_nonzero(np.array(img_light_bw)[int(h * 2 / 3):int(h * 9 / 10), :]) / (
+                single_light_pixel_count * 1.0)
+
+                # REAL WORLD VALUES
+
+                # nzCountRed = np.count_nonzero(np.array(img_light_bw)[0:int(h / 3), :]) / (single_light_pixel_count * 1.0)
+                # nzCountYellow = np.count_nonzero(np.array(img_light_bw)[int(h / 3):int(h * 2 / 3), :]) / (
+                #     single_light_pixel_count * 1.0)
+                # nzCountGreen = np.count_nonzero(np.array(img_light_bw)[int(h * 2 / 3):h, :]) / (
+                #     single_light_pixel_count * 1.0)
 
                 light_colors.extend([nzCountRed, nzCountYellow, nzCountGreen])
 
                 max_i = max(enumerate(light_colors), key=lambda x: x[1])[0]
+
+
+                # SIMULATOR VALUES
 
                 if light_colors[max_i] > 0.05:
                     if max_i == 0:
@@ -215,5 +247,15 @@ class TLClassifier(object):
                         return TrafficLight.RED
                     # elif max_i == 2:
                     #     return TrafficLight.GREEN
+
+                # REAL WORLD VALUES
+
+                # if light_colors[max_i] > 0.15:
+                #     if max_i == 0:
+                #         return TrafficLight.RED
+                #     elif max_i == 1:
+                #         return TrafficLight.RED
+                #     # elif max_i == 2:
+                #     #     return TrafficLight.GREEN
 
         return TrafficLight.UNKNOWN
