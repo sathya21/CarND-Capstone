@@ -37,37 +37,45 @@ class WaypointUpdater(object):
         self.is_signal_red = False
         self.prev_pose = None
         self.move_car = False
+        self.f_sp = None
 
         rospy.init_node('waypoint_updater')
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        self.base_waypoints_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
         self.is_signal_red_pub = rospy.Publisher('is_signal_red', Bool, queue_size=1)
         self.publish()
-
         rospy.spin()
 
     def publish(self):
         rate = rospy.Rate(10)
         while not rospy.is_shutdown():
             if (self.cur_pose is not None) and (self.base_waypoints is not None):
-                next_wp_i = self.next_waypoint(self.cur_pose.pose, self.base_waypoints.waypoints)
+                waypoints = self.base_waypoints.waypoints
+                next_wp_i = self.next_waypoint(self.cur_pose.pose, waypoints)
                 if self.is_signal_red == True and self.red_wp_i > next_wp_i:
                      red_wp_i = self.red_wp_i
-                     sp_wp = [next_wp_i, red_wp_i-1]
-                     next_wp_velocity = self.get_waypoint_velocity(self.base_waypoints.waypoints[next_wp_i])
-        	     sp_v = [next_wp_velocity, 0.0]
-                     f_sp = interp1d(sp_wp, sp_v)
-	             for  p in range(next_wp_i, red_wp_i-1):
-                    	self.set_waypoint_velocity(self.base_waypoints.waypoints, p, f_sp(p))
-		     self.set_waypoint_velocity(self.base_waypoints.waypoints, red_wp_i,0)
+                     if self.f_sp == None:
+                         sp_x = [waypoints[next_wp_i].pose.pose.position.x,
+                                 waypoints[red_wp_i].pose.pose.position.x]
+                         next_wp_velocity = self.get_waypoint_velocity(waypoints[next_wp_i])
+                         if next_wp_velocity >6:
+                              next_wp_velocity = 6
+        	         sp_v = [next_wp_velocity, 0.0]
+                         self.f_sp = interp1d(sp_x, sp_v)
+	             for p in range(next_wp_i, red_wp_i+1):
+                         px = waypoints[p].pose.pose.position.x
+                    	 self.set_waypoint_velocity(waypoints, p, self.f_sp(px))
+		     self.set_waypoint_velocity(waypoints, red_wp_i,0.0)
                      if DEBUG:
                          rospy.loginfo("set velocity to 0")
                 elif self.move_car == True:
-                     self.set_waypoint_velocity(self.base_waypoints.waypoints, next_wp_i, 6)
+	             for p in range(next_wp_i, next_wp_i+LOOKAHEAD_WPS):
+                          self.set_waypoint_velocity(self.base_waypoints.waypoints, p, 6)
+                     self.f_sp = None
                 next_waypoints = self.base_waypoints.waypoints[next_wp_i:next_wp_i+LOOKAHEAD_WPS]
 
                 # publish
@@ -86,6 +94,7 @@ class WaypointUpdater(object):
                            
     def waypoints_cb(self, msg):
         self.base_waypoints = msg
+        self.base_waypoints_sub.unregister()
 
     def traffic_cb(self, msg):
         if DEBUG:
@@ -99,17 +108,22 @@ class WaypointUpdater(object):
             if DEBUG:
                 rospy.loginfo("data %s signal  = true", msg.data)
         else:
-            if self.prev_pose == None:
-                self.prev_pose = self.cur_pose
-            else:
-                if (self.prev_pose.pose.position.x == self.cur_pose.pose.position.x) and (self.prev_pose.pose.position.y == self.cur_pose.pose.position.y):
-                    self.is_signal_red = False
-                    self.red_wp_i = None
-                    self.move_car = True
-                    self.prev_pose = self.cur_pose
-                    if DEBUG:
-                        rospy.loginfo("velocity 0 hence changing the state")
-                self.prev_pose = self.cur_pose
+            #self.prev_pose = self.cur_pose
+            self.move_car = True
+            self.red_wp_i = None
+            self.is_signal_red = False
+
+            #if self.prev_pose == None:
+            #    self.prev_pose = self.cur_pose
+            #else:
+            #    if (self.prev_pose.pose.position.x == self.cur_pose.pose.position.x) and (self.prev_pose.pose.position.y == self.cur_pose.pose.position.y):
+            #        self.is_signal_red = False
+            #        self.red_wp_i = None
+            #        self.move_car = True
+            #        self.prev_pose = self.cur_pose
+            #        if DEBUG:
+            #            rospy.loginfo("velocity 0 hence changing the state")
+            #    self.prev_pose = self.cur_pose
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
