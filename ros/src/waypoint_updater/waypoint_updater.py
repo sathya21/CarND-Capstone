@@ -55,6 +55,8 @@ class WaypointUpdater(object):
         while not rospy.is_shutdown():
             if (self.cur_pose is not None) and (self.base_waypoints is not None):
                 waypoints = self.base_waypoints.waypoints
+                nb_waypoints = len(waypoints)
+
                 next_wp_i = self.next_waypoint(self.cur_pose.pose, waypoints)
                 if self.is_signal_red == True and self.red_wp_i > next_wp_i:
                      red_wp_i = self.red_wp_i
@@ -73,8 +75,11 @@ class WaypointUpdater(object):
                      if DEBUG:
                          rospy.loginfo("set velocity to 0")
                 elif self.move_car == True:
+                     waypoints = self.base_waypoints.waypoints
+                     nb_waypoints = len(waypoints)
 	             for p in range(next_wp_i, next_wp_i+LOOKAHEAD_WPS):
-                          self.set_waypoint_velocity(self.base_waypoints.waypoints, p, 6)
+                          if p < nb_waypoints:
+                               self.set_waypoint_velocity(self.base_waypoints.waypoints, p, 6)
                      self.f_sp = None
                 next_waypoints = self.base_waypoints.waypoints[next_wp_i:next_wp_i+LOOKAHEAD_WPS]
 
@@ -91,7 +96,7 @@ class WaypointUpdater(object):
 
     def pose_cb(self, msg):
         self.cur_pose = msg
-                           
+
     def waypoints_cb(self, msg):
         self.base_waypoints = msg
         self.base_waypoints_sub.unregister()
