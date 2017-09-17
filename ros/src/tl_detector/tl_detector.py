@@ -13,7 +13,7 @@ import math
 import numpy as np
 import yaml
 
-STATE_COUNT_THRESHOLD = 6
+STATE_COUNT_THRESHOLD = 2
 MAX_DIST              = 100.0
 DEBUG                 = False
 
@@ -224,16 +224,16 @@ class TLDetector(object):
         right  = int(x + w_img)
 
         tlState = TrafficLight.UNKNOWN
-        tlState = self.light_classifier.get_classification_v2(cv_image)
+        tlState = self.light_classifier.get_classification_v3(cv_image)
 
-        if self.check_inside_image(left,top) and self.check_inside_image(bottom, right):
+        # if self.check_inside_image(left,top) and self.check_inside_image(bottom, right):
             #roi = cv_image[top:bottom, left:right]
             #self.deb_img.publish(self.bridge.cv2_to_imgmsg(crop, "bgr8"))
             #tlState = self.light_classifier.get_classification_v3(cv_image)
 
             # Publish the cropped image on a ROS topic for debug purposes
-            if DEBUG:
-                self.publish_roi_image(roi)
+            # if DEBUG:
+            #     self.publish_roi_image(roi)
 
             #tlState = self.light_classifier.get_classification(roi)
 
