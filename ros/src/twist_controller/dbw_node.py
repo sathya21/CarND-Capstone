@@ -87,6 +87,8 @@ class DBWNode(object):
                   if DEBUG:
                     rospy.logerr('throttle: {}, brake: {}'.format(throttle, brake))
                   self.publish(throttle, brake, steer)
+                else:
+                  self.controller.pid_reset()
             rate.sleep()
 
     def publish(self, throttle, brake, steer):
