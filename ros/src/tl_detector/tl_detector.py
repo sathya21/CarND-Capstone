@@ -40,8 +40,8 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
-        sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        self.sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+        self.sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         '''
         /vehicle/traffic_lights helps you acquire an accurate ground truth data source for the traffic light
@@ -67,6 +67,7 @@ class TLDetector(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+        self.sub2.unregister()
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
