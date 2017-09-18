@@ -150,7 +150,7 @@ class TLDetector(object):
         #x, y = self.project_to_image_plane(light.pose.pose.position)
 
         tlState = TrafficLight.UNKNOWN
-        tlState = self.light_classifier.get_classification_v2(cv_image)
+        tlState = self.light_classifier.get_classification_v3(cv_image)
         self.dbg_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
 
         #Get classification

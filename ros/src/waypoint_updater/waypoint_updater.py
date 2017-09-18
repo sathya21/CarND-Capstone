@@ -81,8 +81,11 @@ class WaypointUpdater(object):
                         px = waypoints[next_wp_i].pose.pose.position.x
                         next_waypoints.append(waypoints[next_wp_i])
                         remaining_wp_to_red = to_red_wp_count - cur_wp_i
+                        if DEBUG:  
+                            rospy.logerr('value of next waypoint %s red count %s cur_wp_i %s',remaining_wp_to_red, to_red_wp_count, cur_wp_i)
                         self.set_waypoint_velocity(next_waypoints, cur_wp_i, self.f_sp(remaining_wp_to_red))
                         next_wp_i = (next_wp_i + 1) % nb_waypoints
+                    self.f_sp = None
                     self.set_waypoint_velocity(next_waypoints, cur_wp_i, 0.0)
                     if DEBUG:
                         rospy.loginfo("set velocity to 0")
