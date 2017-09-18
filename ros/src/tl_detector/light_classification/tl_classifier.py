@@ -11,6 +11,7 @@ import rospkg
 
 from PIL import Image
 
+SIMULATOR_MODEL = True
 
 class TLClassifier(object):
     def __init__(self):
@@ -38,22 +39,30 @@ class TLClassifier(object):
         self.upper_red_2 = np.array([180, 255, 255], dtype="uint8")
 
     def create_model(self):
-        self.model = Sequential()
-        self.model.add(Dense(200, activation='relu', input_shape=(7800,)))
-        self.model.add(Dense(4, activation='softmax'))
+        self.model =  Sequential()
+        #self.model.add(Dense(200, activation='relu', input_shape=(7800,)))
+        #self.model.add(Dense(4, activation='softmax'))
+        self.model.add(Dense(200, activation='relu', input_shape=(30000,)))
+        self.model.add(Dense(3, activation='softmax'))
 
         rospack = rospkg.RosPack()
         path_v = rospack.get_path('styx')
-        model_file = path_v + \
-                     '/../tl_detector/light_classification/tl-classifier-model.h5'
+        model_file = path_v+ \
+               '/../tl_detector/light_classification/tl-classifier-model-sim.h5'
         self.model.load_weights(model_file)
         self.graph = tensorflow.get_default_graph()
 
     def load_ssd_model(self):
         rospack = rospkg.RosPack()
         path_v = rospack.get_path('styx')
-        PATH_TO_CKPT = path_v + \
-                     '/../tl_detector/light_classification/frozen_inference_graph_sim.pb'
+
+        if SIMULATOR_MODEL:
+            PATH_TO_CKPT = path_v + \
+                           '/../tl_detector/light_classification/frozen_inference_graph_sim.pb'
+        else:
+            PATH_TO_CKPT = path_v + \
+                            '/../tl_detector/light_classification/frozen_inference_graph_real.pb'
+
         PATH_TO_LABELS = path_v + \
                      '/../tl_detector/light_classification/tl_label_map.pbtxt'
         self.detection_graph = tensorflow.Graph()
@@ -66,11 +75,6 @@ class TLClassifier(object):
 
             self.sess = tensorflow.Session(graph=self.detection_graph)
 
-    def _get_color_class(self, classes):
-        for i in range(len(classes)):
-            if classes[i] == 1:
-                return self.colors[i]
-        return TrafficLight.UNKNOWN
 
     def get_classification_v2(self, image):
         """Determines the color of the traffic light in the image
@@ -82,13 +86,17 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        image_new = image[250:600, 0:1300]
-        dim = (100, 26)
+        #image_new = image[250:600, 0:1300]
+        image_new = image[100:700, 50:550]
+        #dim = (100, 26)
+        r = 100.0 / image_new.shape[1]
+        dim = (100, int(image_new.shape[0] * r))
         resized = cv2.resize(image_new, dim)
         image_data = np.array([resized.flatten().tolist()])
+        image_data /= 255
         with self.graph.as_default():
-            classes = self.model.predict(image_data, batch_size=1)
-            return self._get_color_class(classes[0])
+             classes = self.model.predict(image_data, batch_size=1)
+             return self.colors[np.argmax(classes[0])]
         return TrafficLight.UNKNOWN
 
     def get_classification(self, image):
@@ -189,30 +197,55 @@ class TLClassifier(object):
                 img_light_gray = img_light.convert('L')
 
                 img_light_bw_np = np.asarray(img_light_gray).copy()
-                img_light_bw_np[img_light_bw_np < 100] = 0  # Black
-                img_light_bw_np[img_light_bw_np >= 100] = 255  # White
+
+                if SIMULATOR_MODEL:
+                    img_light_bw_np[img_light_bw_np < 100] = 0  # Black
+                    img_light_bw_np[img_light_bw_np >= 100] = 255  # White
+                else:
+                    img_light_bw_np[img_light_bw_np < 190] = 0  # Black
+                    img_light_bw_np[img_light_bw_np >= 190] = 255  # White
+
                 img_light_bw = Image.fromarray(img_light_bw_np)
                 w, h = img_light_bw.size
+                h_w_ratio = h / (w * 1.0)
 
                 light_colors = []  # red, yellow, green
                 single_light_pixel_count = int(h * w / 3)
 
-                nzCountRed = np.count_nonzero(np.array(img_light_bw)[0:int(h / 3), :]) / (single_light_pixel_count * 1.0)
-                nzCountYellow = np.count_nonzero(np.array(img_light_bw)[int(h / 3):int(h * 2 / 3), :]) / (
+                if SIMULATOR_MODEL:
+                    nzCountRed = np.count_nonzero(np.array(img_light_bw)[int(h / 10):int(h / 3), :]) / (
+                        single_light_pixel_count * 1.0)
+                    nzCountYellow = np.count_nonzero(np.array(img_light_bw)[int(h / 3):int(h * 2 / 3), :]) / (
+                        single_light_pixel_count * 1.0)
+                    nzCountGreen = np.count_nonzero(np.array(img_light_bw)[int(h * 2 / 3):int(h * 9 / 10), :]) / (
+                        single_light_pixel_count * 1.0)
+                else:
+                    nzCountRed = np.count_nonzero(np.array(img_light_bw)[0:int(h / 3), :]) / (
                     single_light_pixel_count * 1.0)
-                nzCountGreen = np.count_nonzero(np.array(img_light_bw)[int(h * 2 / 3):h, :]) / (
-                    single_light_pixel_count * 1.0)
+                    nzCountYellow = np.count_nonzero(np.array(img_light_bw)[int(h / 3):int(h * 2 / 3), :]) / (
+                        single_light_pixel_count * 1.0)
+                    nzCountGreen = np.count_nonzero(np.array(img_light_bw)[int(h * 2 / 3):h, :]) / (
+                        single_light_pixel_count * 1.0)
 
                 light_colors.extend([nzCountRed, nzCountYellow, nzCountGreen])
 
                 max_i = max(enumerate(light_colors), key=lambda x: x[1])[0]
 
-                if light_colors[max_i] > 0.05:
-                    if max_i == 0:
-                        return TrafficLight.RED
-                    # elif max_i == 1:
-                    #     return TrafficLight.YELLOW
-                    # elif max_i == 2:
-                    #     return TrafficLight.GREEN
+                if SIMULATOR_MODEL:
+                    if light_colors[max_i] > 0.05:
+                        if max_i == 0:
+                            return TrafficLight.RED
+                        elif max_i == 1:
+                            return TrafficLight.RED
+                        elif max_i == 2:
+                            return TrafficLight.GREEN
+                else:
+                    if (0.10 < light_colors[max_i] < 0.97) and (h_w_ratio > 1.75):
+                        if max_i == 0:
+                            return TrafficLight.RED
+                        elif max_i == 1:
+                            return TrafficLight.RED
+                        elif max_i == 2:
+                            return TrafficLight.GREEN
 
         return TrafficLight.UNKNOWN

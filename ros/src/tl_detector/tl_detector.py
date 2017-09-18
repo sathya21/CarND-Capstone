@@ -13,7 +13,7 @@ import math
 import numpy as np
 import yaml
 
-STATE_COUNT_THRESHOLD = 3
+STATE_COUNT_THRESHOLD = 2
 MAX_DIST              = 100.0
 DEBUG                 = False
 
@@ -30,9 +30,18 @@ class TLDetector(object):
         self.waypoints = None
         self.camera_image = None
         self.lights = []
+        
+        self.bridge = CvBridge()
+        self.light_classifier = TLClassifier()
+        self.listener = tf.TransformListener()
 
-        sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        self.state = TrafficLight.UNKNOWN
+        self.last_state = TrafficLight.UNKNOWN
+        self.last_wp = -1
+        self.state_count = 0
+
+        self.sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+        self.sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         '''
         /vehicle/traffic_lights helps you acquire an accurate ground truth data source for the traffic light
@@ -50,16 +59,7 @@ class TLDetector(object):
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
         self.dbg_img = rospy.Publisher('/dbg_img', Image, queue_size=1)
         # To view: rosrun image_view image_view image:=/dbg_img
-
-        self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
-        self.listener = tf.TransformListener()
-
-        self.state = TrafficLight.UNKNOWN
-        self.last_state = TrafficLight.UNKNOWN
-        self.last_wp = -1
-        self.state_count = 0
-
+        
         rospy.spin()
 
     def pose_cb(self, msg):
@@ -67,6 +67,7 @@ class TLDetector(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+        self.sub2.unregister()
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
@@ -92,6 +93,7 @@ class TLDetector(object):
         if self.state != state:
             self.state_count = 0
             self.state = state
+            self.last_wp = -1
         elif self.state_count >= STATE_COUNT_THRESHOLD:
             self.last_state = self.state
             light_wp = light_wp if state == TrafficLight.RED else -1
@@ -120,10 +122,11 @@ class TLDetector(object):
             waypoints = self.waypoints
             dl = lambda a, b: (a.x - b.x) ** 2 + (a.y - b.y) ** 2
             for i in range(len(waypoints)):
-                dist = dl(pose, waypoints[i].pose.pose.position)
-                if dist < closest_len:
-                    closest_len = dist
-                    closest_wp_i = i
+                if pose.x <= waypoints[i].pose.pose.position.x:
+                    dist = dl(pose, waypoints[i].pose.pose.position)
+                    if dist < closest_len:
+                        closest_len = dist
+                        closest_wp_i = i
         return closest_wp_i
 
 
@@ -150,8 +153,20 @@ class TLDetector(object):
         #Get classification
         if DEBUG:
             rospy.loginfo('tlState: {}'.format(tlState))
+        #rospy.loginfo('tlState: {}'.format(light.state))
 
         return tlState
+
+    
+    def publish_roi_image(self, img):
+
+        try:
+            # Transform from OpenCV image to ROS Image
+            self.dbg_img.publish(self.bridge.cv2_to_imgmsg(img, "bgr8"))
+
+        except CvBridgeError as e:
+
+            print(e)
 
 
     def process_traffic_lights(self):
