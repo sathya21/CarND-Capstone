@@ -23,7 +23,7 @@ class Controller(object):
         self.max_steer_angle = args[9]
 
         self.pid_velocity = PID(0.05, 0.0, 0.01)
-        self.pid_steering = PID(4.0, 0.0, 0.7)
+        self.pid_steering = PID(10.0, 0.0, 1.0)
         self.lowpass_velocity = LowPassFilter(13)
         self.lowpass_steering = LowPassFilter(4)
 
