@@ -39,15 +39,13 @@ class TLClassifier(object):
 
     def create_model(self):
         self.model =  Sequential()
-        #self.model.add(Dense(200, activation='relu', input_shape=(7800,)))
-        #self.model.add(Dense(4, activation='softmax'))
-        self.model.add(Dense(200, activation='relu', input_shape=(30000,)))
-        self.model.add(Dense(3, activation='softmax'))
+        self.model.add(Dense(200, activation='relu', input_shape=(22500,)))
+        self.model.add(Dense(4, activation='softmax'))
 
         rospack = rospkg.RosPack()
         path_v = rospack.get_path('styx')
         model_file = path_v+ \
-               '/../tl_detector/light_classification/tl-classifier-model-sim.h5'
+               '/../tl_detector/light_classification/tl-classifier-model.h5'
         self.model.load_weights(model_file)
         self.graph = tensorflow.get_default_graph()
 
@@ -88,9 +86,7 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        #image_new = image[250:600, 0:1300]
-        image_new = image[100:700, 50:550]
-        #dim = (100, 26)
+        image_new = image[0:600, 0:800]
         r = 100.0 / image_new.shape[1]
         dim = (100, int(image_new.shape[0] * r))
         resized = cv2.resize(image_new, dim)

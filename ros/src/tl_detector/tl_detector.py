@@ -224,7 +224,8 @@ class TLDetector(object):
         right  = int(x + w_img)
 
         tlState = TrafficLight.UNKNOWN
-        tlState = self.light_classifier.get_classification_v3(cv_image)
+        tlState = self.light_classifier.get_classification_v2(cv_image)
+        #self.dbg_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
 
         # if self.check_inside_image(left,top) and self.check_inside_image(bottom, right):
             #roi = cv_image[top:bottom, left:right]
@@ -238,11 +239,11 @@ class TLDetector(object):
             #tlState = self.light_classifier.get_classification(roi)
 
         #Get classification
-        if DEBUG:
-            rospy.loginfo('tlState: {}'.format(tlState))
+        #if DEBUG:
+        rospy.loginfo('tlState: {}'.format(tlState))
         #rospy.loginfo('tlState: {}'.format(light.state))
 
-        return light.state #tlState
+        return tlState
 
     def publish_roi_image(self, img):
 
