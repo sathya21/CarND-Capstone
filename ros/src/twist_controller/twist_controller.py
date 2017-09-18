@@ -62,3 +62,9 @@ class Controller(object):
 
         # Return throttle, brake, steer
         return throttle, brake, steer
+
+    def pid_reset(self):
+        self.pid_velocity.reset()
+        self.pid_steering.reset()
+        self.lowpass_steering.reset()
+        self.lowpass_velocity.reset()
