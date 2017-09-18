@@ -40,8 +40,8 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
-        sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        self.sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+        self.sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         '''
         /vehicle/traffic_lights helps you acquire an accurate ground truth data source for the traffic light
@@ -67,6 +67,7 @@ class TLDetector(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+        self.sub2.unregister()
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
@@ -129,69 +130,6 @@ class TLDetector(object):
         return closest_wp_i
 
 
-    def project_to_image_plane(self, point_in_world):
-        """Project point from 3D world coordinates to 2D camera image location
-
-        Args:
-            point_in_world (Point): 3D location of a point in the world
-
-        Returns:
-            x (int): x coordinate of target point in image
-            y (int): y coordinate of target point in image
-
-        """
-        x  = -1 
-        y  = -1
-
-        fx = self.config['camera_info']['focal_length_x']
-        fy = self.config['camera_info']['focal_length_y']
-        image_width = self.config['camera_info']['image_width']
-        image_height = self.config['camera_info']['image_height']
-
-        # get transform between pose of camera and world frame
-        trans = None
-        rot   = None
-        try:
-            now = rospy.Time.now()
-            self.listener.waitForTransform("/base_link",
-                  "/world", now, rospy.Duration(1.0))
-            (trans, rot) = self.listener.lookupTransform("/base_link",
-                  "/world", now)
-
-        except (tf.Exception, tf.LookupException, tf.ConnectivityException):
-            rospy.logerr("Failed to find camera to map transform")
-
-        if (rot is not None) and (trans is not None):
-
-            #TODO Use tranform and rotation to calculate 2D position of light in image
-            trans_mat = tf.transformations.translation_matrix(trans)
-            rot_mat   = tf.transformations.quaternion_matrix(rot)
-
-            M  = np.dot(trans_mat, rot_mat)
-            point_hom = np.array([[point_in_world.x], [point_in_world.y], [point_in_world.z], [1.0]])
-            point_veh = np.dot(M, point_hom)
-            
-            # Transform points to image plane
-            x = -fx * point_veh[1]/point_veh[0] + 0.5*image_width
-            y = -fy * point_veh[2]/point_veh[0] + 0.5*image_height
-
-
-            if DEBUG:
-              rospy.loginfo('trans: {}'.format(trans))
-              rospy.loginfo('rot: {}'.format(rot))
-              rospy.loginfo('point_x: {}, point_y: {} point_z: {}'.format(point_in_world.x, point_in_world.y, point_in_world.z))
-              rospy.loginfo('point_x_veh: {}, point_y_veh: {} point_z_veh: {}'.format(point_veh[0], point_veh[1], point_veh[2]))
-              rospy.loginfo('x_img: {}, y_img: {}'.format(x, y))
-
-        return (x, y)
-
-    def check_inside_image(self, x, y):
-        inside = ( (x is not None) and (y is not None)  
-                   and (x >= 0)         and (x <= self.config['camera_info']['image_width'])
-                   and (y >= 0)         and (x <= self.config['camera_info']['image_height']) )
-
-        return inside
-
     def get_light_state(self, light):
         """Determines the current color of the traffic light
 
@@ -209,34 +147,11 @@ class TLDetector(object):
         self.camera_image.encoding = "rgb8"
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
 
-        x, y = self.project_to_image_plane(light.pose.pose.position)
-
-        #TODO use light location to zoom in on traffic light in image
-        image_width  = self.config['camera_info']['image_width']
-        image_height = self.config['camera_info']['image_height']
-
-        w_img = int(0.15*image_width)
-        h_img = int(image_height/3)
-
-        top    = int(image_height*0.15)
-        bottom = int(y + h_img)
-        left   = int(x - w_img)
-        right  = int(x + w_img)
+        #x, y = self.project_to_image_plane(light.pose.pose.position)
 
         tlState = TrafficLight.UNKNOWN
         tlState = self.light_classifier.get_classification_v2(cv_image)
-        #self.dbg_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
-
-        # if self.check_inside_image(left,top) and self.check_inside_image(bottom, right):
-            #roi = cv_image[top:bottom, left:right]
-            #self.deb_img.publish(self.bridge.cv2_to_imgmsg(crop, "bgr8"))
-            #tlState = self.light_classifier.get_classification_v3(cv_image)
-
-            # Publish the cropped image on a ROS topic for debug purposes
-            # if DEBUG:
-            #     self.publish_roi_image(roi)
-
-            #tlState = self.light_classifier.get_classification(roi)
+        self.dbg_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
 
         #Get classification
         #if DEBUG:
@@ -245,6 +160,7 @@ class TLDetector(object):
 
         return tlState
 
+    
     def publish_roi_image(self, img):
 
         try:

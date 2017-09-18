@@ -26,8 +26,10 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 50 # Number of waypoints we will publish. You can change this number
 DEBUG         = False
+SPEED_LIMIT   = 6  # 10 mp/h
+STOP_DIST     = 30 # wp count
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -56,32 +58,50 @@ class WaypointUpdater(object):
             if (self.cur_pose is not None) and (self.base_waypoints is not None):
                 waypoints = self.base_waypoints.waypoints
                 nb_waypoints = len(waypoints)
+                next_waypoints = []
 
                 next_wp_i = self.next_waypoint(self.cur_pose.pose, waypoints)
-                if self.is_signal_red == True and self.red_wp_i > next_wp_i:
-                     red_wp_i = self.red_wp_i
-                     if self.f_sp == None:
-                         sp_x = [waypoints[next_wp_i].pose.pose.position.x,
-                                 waypoints[red_wp_i].pose.pose.position.x]
-                         next_wp_velocity = self.get_waypoint_velocity(waypoints[next_wp_i])
-                         if next_wp_velocity >6:
-                              next_wp_velocity = 6
-        	         sp_v = [next_wp_velocity, 0.0]
-                         self.f_sp = interp1d(sp_x, sp_v)
-	             for p in range(next_wp_i, red_wp_i+1):
-                         px = waypoints[p].pose.pose.position.x
-                    	 self.set_waypoint_velocity(waypoints, p, self.f_sp(px))
-		     self.set_waypoint_velocity(waypoints, red_wp_i,0.0)
-                     if DEBUG:
-                         rospy.loginfo("set velocity to 0")
-                elif self.move_car == True:
-                     waypoints = self.base_waypoints.waypoints
-                     nb_waypoints = len(waypoints)
-	             for p in range(next_wp_i, next_wp_i+LOOKAHEAD_WPS):
-                          if p < nb_waypoints:
-                               self.set_waypoint_velocity(self.base_waypoints.waypoints, p, 6)
-                     self.f_sp = None
-                next_waypoints = self.base_waypoints.waypoints[next_wp_i:next_wp_i+LOOKAHEAD_WPS]
+                to_red_wp_count = 0
+                if self.is_signal_red == True:
+                    # count waypoints between current and red
+                    to_red_wp_count = self.wp_count(next_wp_i, self.red_wp_i+1)
+                    if DEBUG:
+                        rospy.logerr('to red: {}; cur wp: {}, red_wp: {}'.format(to_red_wp_count, next_wp_i, self.red_wp_i+1))
+
+                if (self.is_signal_red == True) and (0 < to_red_wp_count < STOP_DIST):
+                    if self.f_sp == None:
+                        # sp_x = [waypoints[next_wp_i].pose.pose.position.x, waypoints[self.red_wp_i].pose.pose.position.x]
+                        sp_wp_i = [to_red_wp_count, 0]
+                        next_wp_velocity = self.get_waypoint_velocity(self.base_waypoints.waypoints[next_wp_i])
+                        if next_wp_velocity > SPEED_LIMIT:
+                            next_wp_velocity = SPEED_LIMIT
+                        sp_v = [next_wp_velocity, 0.0]
+                        self.f_sp = interp1d(sp_wp_i, sp_v)
+                    for cur_wp_i in range(to_red_wp_count):
+                        px = waypoints[next_wp_i].pose.pose.position.x
+                        next_waypoints.append(waypoints[next_wp_i])
+                        remaining_wp_to_red = to_red_wp_count - cur_wp_i
+                        self.set_waypoint_velocity(next_waypoints, cur_wp_i, self.f_sp(remaining_wp_to_red))
+                        next_wp_i = (next_wp_i + 1) % nb_waypoints
+                    self.set_waypoint_velocity(next_waypoints, cur_wp_i, 0.0)
+                    if DEBUG:
+                        rospy.loginfo("set velocity to 0")
+                else:
+                    if DEBUG:
+                        rospy.logerr('normal drive')
+                    for cur_wp_i in range(LOOKAHEAD_WPS):
+                        next_wp_velocity = self.get_waypoint_velocity(self.base_waypoints.waypoints[next_wp_i])
+                        if next_wp_velocity > SPEED_LIMIT:
+                            next_wp_velocity = SPEED_LIMIT
+                        next_waypoints.append(waypoints[next_wp_i])
+                        self.set_waypoint_velocity(next_waypoints, cur_wp_i, SPEED_LIMIT)
+                        next_wp_i = (next_wp_i + 1) % nb_waypoints
+                    self.f_sp = None
+
+                # next_waypoints = waypoints[next_wp_i:next_wp_i+LOOKAHEAD_WPS]
+
+                if DEBUG:
+                    rospy.logerr('# of wps published: {}'.format(len(next_waypoints)))
 
                 # publish
                 final_waypoints_msg = Lane()
@@ -93,6 +113,12 @@ class WaypointUpdater(object):
                 self.is_signal_red_pub.publish(self.is_signal_red)
 
             rate.sleep()
+
+    def wp_count(self, wp_i_1, wp_i_2):
+        if (wp_i_2 > wp_i_1):
+            return wp_i_2 - wp_i_1
+        else:
+            return len(self.base_waypoints.waypoints) - wp_i_1 + wp_i_2
 
     def pose_cb(self, msg):
         self.cur_pose = msg
@@ -108,7 +134,7 @@ class WaypointUpdater(object):
 
         if msg.data  >=  0: 
             self.is_signal_red = True
-	    self.red_wp_i = msg.data
+            self.red_wp_i = msg.data
             self.move_car = False
             if DEBUG:
                 rospy.loginfo("data %s signal  = true", msg.data)
@@ -178,7 +204,7 @@ class WaypointUpdater(object):
             rospy.logerr('closest wp: {}; {}-{}'.format(closest_wp_i, waypoints[closest_wp_i].pose.pose.position.x, waypoints[closest_wp_i].pose.pose.position.y))
 
         if angle > (math.pi / 4):
-            closest_wp_i += 1
+            closest_wp_i = (closest_wp_i + 1) % len(waypoints)
             if DEBUG:
                 rospy.logerr('corrected wp: {}; {}-{}'.format(closest_wp_i, waypoints[closest_wp_i].pose.pose.position.x, waypoints[closest_wp_i].pose.pose.position.y))
 
