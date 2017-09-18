@@ -212,6 +212,7 @@ class TLClassifier(object):
 
                 img_light_bw = Image.fromarray(img_light_bw_np)
                 w, h = img_light_bw.size
+                h_w_ratio = h / (w * 1.0)
 
                 light_colors = []  # red, yellow, green
                 single_light_pixel_count = int(h * w / 3)
@@ -245,17 +246,17 @@ class TLClassifier(object):
                         return TrafficLight.RED
                     elif max_i == 1:
                         return TrafficLight.RED
-                    # elif max_i == 2:
-                    #     return TrafficLight.GREEN
+                    elif max_i == 2:
+                        return TrafficLight.GREEN
 
                 # REAL WORLD VALUES
 
-                # if light_colors[max_i] > 0.15:
+                # if (0.10 < light_colors[max_i] < 0.97) and (h_w_ratio > 1.75):
                 #     if max_i == 0:
                 #         return TrafficLight.RED
                 #     elif max_i == 1:
                 #         return TrafficLight.RED
-                #     # elif max_i == 2:
-                #     #     return TrafficLight.GREEN
+                #     elif max_i == 2:
+                #         return TrafficLight.GREEN
 
         return TrafficLight.UNKNOWN
