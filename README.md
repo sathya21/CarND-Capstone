@@ -2,10 +2,10 @@
 _____________________________________________________
 ## Team:
   1. Jana Punuru ( jpunuru@gmail.com )
-  2. Sathya          ( sathya21@gmail.com )
+  2. Sathya Narayanan Nagarajan  ( sathya21@gmail.com )
   3. Friedrich Erbs ( friedricherbs@gmail.com )
   4. Marcus Erbar ( marcus.erbar@gmail.com )
-  5.  James Jackson ( fiberhog@gmail.com )
+  5. James Jackson ( fiberhog@gmail.com )
 
 
 ## Overview:
@@ -17,7 +17,7 @@ The provided system supplies an array of waypoints covering the entire track via
 ``waypoint_update.py`` determines the closest waypoint in travel direction and builds a new array, looking 50 waypoints down the road if there is no red traffic light ahead. In the case of a red light, it only extracts new waypoints up to the traffic light's stopping line.
 
 ### 2. Traffic Light Detection and Classification:
-Once we make the car able follow the waypoints consistently on the simulator, next we spent how it traffic light status. For this, initially, we implemented heuristic by just count number red pixels, an then we tried with simpler two layer feedforward net, and finally we end up implementing much more sophisticated model as described below.
+Once we make the car able to follow the waypoints consistently on the simulator, next we spent on how it detects traffic light status. For this, initially, we implemented heuristic by just count number red pixels, then we tried with simpler two layer feedforward net, and finally we ended up implementing much more sophisticated model as described below.
 
 The traffic light module localizes and classifies traffic lights within the camera image stream. The chosen approach relies on two phases. The first phase uses deep learning to generate candidate bounding boxes for the traffic lights. The second phase validates the bounding boxes, and uses image thresholding to deterministically classify the traffic lights (RED, YELLOW, GREEN, UNKNOWN).
 
