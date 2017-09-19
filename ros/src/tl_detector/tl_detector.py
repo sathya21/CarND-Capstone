@@ -57,7 +57,7 @@ class TLDetector(object):
         self.config = yaml.load(config_string)
 
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
-        self.dbg_img = rospy.Publisher('/dbg_img', Image, queue_size=1)
+        #self.dbg_img = rospy.Publisher('/dbg_img', Image, queue_size=1)
         # To view: rosrun image_view image_view image:=/dbg_img
         
         rospy.spin()
@@ -151,11 +151,11 @@ class TLDetector(object):
 
         tlState = TrafficLight.UNKNOWN
         tlState = self.light_classifier.get_classification_v3(cv_image)
-        self.dbg_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
+        #self.dbg_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
 
         #Get classification
         #if DEBUG:
-        rospy.loginfo('tlState: {}'.format(tlState))
+        #rospy.loginfo('tlState: {}'.format(tlState))
         #rospy.loginfo('tlState: {}'.format(light.state))
 
         return tlState

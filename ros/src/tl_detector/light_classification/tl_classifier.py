@@ -11,18 +11,17 @@ import rospkg
 
 from PIL import Image
 
-SIMULATOR_MODEL = True
+SIMULATOR_MODEL = False
 
 class TLClassifier(object):
     def __init__(self):
         # TODO load classifier
-        self.model = None
-        self.create_model()
+        #self.model = None
+        #self.create_model()
+        #if not self.model:
+        #    rospy.logerr("Failed to traffic light classifier model")
 
         self.load_ssd_model()
-
-        if not self.model:
-            rospy.logerr("Failed to traffic light classifier model")
 
         self.colors = [TrafficLight.RED,
                        TrafficLight.YELLOW,
