@@ -54,7 +54,9 @@ Computed spline is used set the velocities for the following waypoints until way
 ## Vehicle Actuation
 We control inputs to the vehicle's throttle, braking and steering subsytems in ``dbw_node.py``. 
 
-All three are controlled with simple PID Controllers whose outputs are further smoothed via separate low-pass filters. Input errors for the controllers are derived from the current velocity of the vehicle in ``/current_velocity`` and suggested steering angles in ``/twist_cmd``.
+All three are controlled with simple PID Controllers whose outputs are further smoothed via separate low-pass filters. Input errors for the controllers are derived from the current velocity of the vehicle in ``/current_velocity`` and suggested steering angles in ``/twist_cmd``. 
+
+In case of a manual override by the safety driver, the PID controllers and filters reset to zero.
 
 ## Conclusion
 
