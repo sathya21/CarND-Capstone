@@ -155,7 +155,7 @@ class TLDetector(object):
 
         #Get classification
         #if DEBUG:
-        #rospy.loginfo('tlState: {}'.format(tlState))
+        rospy.loginfo('tlState: {}'.format(tlState))
         #rospy.loginfo('tlState: {}'.format(light.state))
 
         return tlState
