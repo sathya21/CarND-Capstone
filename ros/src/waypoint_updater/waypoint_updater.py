@@ -2,13 +2,14 @@
 
 import rospy
 from geometry_msgs.msg import PoseStamped
-from styx_msgs.msg import Lane, Waypoint
+from std_msgs.msg import Int32
 from styx_msgs.msg import Lane, Waypoint, TrafficLightArray, TrafficLight
 import numpy as np
 import tf
 import math
 import std_msgs.msg
 from std_msgs.msg import Bool, Float64, Int32
+from scipy.interpolate import interp1d
 
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
@@ -25,46 +26,85 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 50 # Number of waypoints we will publish. You can change this number
 DEBUG         = False
-MAX_DIST      = 50.0
-BREAK_DIST    = 5.0
-SLOW_VELOCITY = 1.5
-FULL_VELOCITY = 4.5
+SPEED_LIMIT   = 6  # 10 mp/h
+STOP_DIST     = 30 # wp count
 
 class WaypointUpdater(object):
     def __init__(self):
         self.cur_pose = None
         self.base_waypoints = None
         self.next_waypoints = None
+        self.is_signal_red = False
+        self.prev_pose = None
+        self.move_car = False
+        self.f_sp = None
 
         rospy.init_node('waypoint_updater')
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        self.base_waypoints_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
-        self.velocity_pub = rospy.Publisher('velocity_reference', Float64, queue_size=1)
-        self.velocity_reference = 0.0
-
-        self.tl_pos_x = None
-        self.tl_pos_y = None
-        self.tl_color = None 
-
-        rospy.Subscriber('/traffic_waypoint', TrafficLight, self.tl_cb)
-
+        self.is_signal_red_pub = rospy.Publisher('is_signal_red', Bool, queue_size=1)
         self.publish()
-
         rospy.spin()
 
     def publish(self):
         rate = rospy.Rate(10)
         while not rospy.is_shutdown():
             if (self.cur_pose is not None) and (self.base_waypoints is not None):
-                wp_base_size = len(self.base_waypoints.waypoints)
-                # rospy.loginfo('wp_base_size: {}'.format(wp_base_size)) # 10902 wps at start
-                next_wp_i = self.next_waypoint(self.cur_pose.pose, self.base_waypoints.waypoints)
-                next_waypoints = self.base_waypoints.waypoints[next_wp_i:next_wp_i+LOOKAHEAD_WPS]
+                waypoints = self.base_waypoints.waypoints
+                nb_waypoints = len(waypoints)
+                next_waypoints = []
+
+                next_wp_i = self.next_waypoint(self.cur_pose.pose, waypoints)
+                to_red_wp_count = 0
+                if self.is_signal_red == True:
+                    # count waypoints between current and red
+                    to_red_wp_count = self.wp_count(next_wp_i, self.red_wp_i+1)
+                    if DEBUG:
+                        rospy.logerr('to red: {}; cur wp: {}, red_wp: {}'.format(to_red_wp_count, next_wp_i, self.red_wp_i+1))
+
+                if (self.is_signal_red == True) and (0 < to_red_wp_count < STOP_DIST):
+                    if self.f_sp == None:
+                        # sp_x = [waypoints[next_wp_i].pose.pose.position.x, waypoints[self.red_wp_i].pose.pose.position.x]
+                        sp_wp_i = [to_red_wp_count, 0]
+                        next_wp_velocity = self.get_waypoint_velocity(self.base_waypoints.waypoints[next_wp_i])
+                        if next_wp_velocity > SPEED_LIMIT:
+                            next_wp_velocity = SPEED_LIMIT
+                        sp_v = [next_wp_velocity, 0.0]
+                        self.f_sp = interp1d(sp_wp_i, sp_v)
+                    for cur_wp_i in range(to_red_wp_count):
+                        px = waypoints[next_wp_i].pose.pose.position.x
+                        next_waypoints.append(waypoints[next_wp_i])
+                        remaining_wp_to_red = to_red_wp_count - cur_wp_i
+                        if DEBUG:  
+                            rospy.logerr('value of next waypoint %s red count %s cur_wp_i %s',remaining_wp_to_red, to_red_wp_count, cur_wp_i)
+                        self.set_waypoint_velocity(next_waypoints, cur_wp_i, self.f_sp(remaining_wp_to_red))
+                        next_wp_i = (next_wp_i + 1) % nb_waypoints
+                    self.f_sp = None
+                    self.set_waypoint_velocity(next_waypoints, cur_wp_i, 0.0)
+                    if DEBUG:
+                        rospy.loginfo("set velocity to 0")
+                else:
+                    if DEBUG:
+                        rospy.logerr('normal drive')
+                    for cur_wp_i in range(LOOKAHEAD_WPS):
+                        next_wp_velocity = self.get_waypoint_velocity(self.base_waypoints.waypoints[next_wp_i])
+                        if next_wp_velocity > SPEED_LIMIT:
+                            next_wp_velocity = SPEED_LIMIT
+                        next_waypoints.append(waypoints[next_wp_i])
+                        self.set_waypoint_velocity(next_waypoints, cur_wp_i, SPEED_LIMIT)
+                        next_wp_i = (next_wp_i + 1) % nb_waypoints
+                    self.f_sp = None
+
+                # next_waypoints = waypoints[next_wp_i:next_wp_i+LOOKAHEAD_WPS]
+
+                if DEBUG:
+                    rospy.logerr('# of wps published: {}'.format(len(next_waypoints)))
 
                 # publish
                 final_waypoints_msg = Lane()
@@ -73,62 +113,62 @@ class WaypointUpdater(object):
                 final_waypoints_msg.waypoints = next_waypoints
                 self.final_waypoints_pub.publish(final_waypoints_msg)
 
-                # Obtain light position
-                if self.tl_color is not None:
-                    x_ego   = self.cur_pose.pose.position.x
-                    y_ego   = self.cur_pose.pose.position.y
-
-                    pose_quaternion = (self.cur_pose.pose.orientation.x, self.cur_pose.pose.orientation.y, self.cur_pose.pose.orientation.z, self.cur_pose.pose.orientation.w)
-                    (_, _, yaw) = tf.transformations.euler_from_quaternion(pose_quaternion)
-                    sin_yaw = math.sin(yaw)
-                    cos_yaw = math.cos(yaw)
-
-                    light_pos_vehicle = self.convert_ego_to_vehicle(x_ego, y_ego, cos_yaw, sin_yaw, self.tl_pos_x, self.tl_pos_y)
-
-                    # Set reference velocity
-                    if ( ((light_pos_vehicle[0] < MAX_DIST) and (light_pos_vehicle[0] >= BREAK_DIST)) and (self.tl_color == 0) ):
-                        self.velocity_reference = SLOW_VELOCITY
-                        if DEBUG:
-                            rospy.logerr('Slow velocity')
-                    elif ( ((light_pos_vehicle[0] < BREAK_DIST) and (light_pos_vehicle[0] > 0.0)) and (self.tl_color == 0) ):
-                        self.velocity_reference = 0.0
-                        if DEBUG:
-                            rospy.logerr('Break')
-                    else:
-                        self.velocity_reference = FULL_VELOCITY
-                        if DEBUG:
-                            rospy.logerr('Full velocity')
-
-                    self.velocity_pub.publish(self.velocity_reference)
+                self.is_signal_red_pub.publish(self.is_signal_red)
 
             rate.sleep()
 
+    def wp_count(self, wp_i_1, wp_i_2):
+        if (wp_i_2 > wp_i_1):
+            return wp_i_2 - wp_i_1
+        else:
+            return len(self.base_waypoints.waypoints) - wp_i_1 + wp_i_2
+
     def pose_cb(self, msg):
         self.cur_pose = msg
-                           
+
     def waypoints_cb(self, msg):
         self.base_waypoints = msg
+        self.base_waypoints_sub.unregister()
 
     def traffic_cb(self, msg):
-        # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+        if DEBUG:
+            rospy.logerr('Got TL')
+            rospy.logerr("message = %s", msg)
+
+        if msg.data  >=  0: 
+            self.is_signal_red = True
+            self.red_wp_i = msg.data
+            self.move_car = False
+            if DEBUG:
+                rospy.loginfo("data %s signal  = true", msg.data)
+        else:
+            #self.prev_pose = self.cur_pose
+            self.move_car = True
+            self.red_wp_i = None
+            self.is_signal_red = False
+
+            #if self.prev_pose == None:
+            #    self.prev_pose = self.cur_pose
+            #else:
+            #    if (self.prev_pose.pose.position.x == self.cur_pose.pose.position.x) and (self.prev_pose.pose.position.y == self.cur_pose.pose.position.y):
+            #        self.is_signal_red = False
+            #        self.red_wp_i = None
+            #        self.move_car = True
+            #        self.prev_pose = self.cur_pose
+            #        if DEBUG:
+            #            rospy.loginfo("velocity 0 hence changing the state")
+            #    self.prev_pose = self.cur_pose
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
         pass
 
-    def tl_cb(self, msg):
-        self.tl_pos_x = msg.pose.pose.position.x
-        self.tl_pos_y = msg.pose.pose.position.y
-        self.tl_color = msg.state
-        if DEBUG:
-            rospy.logerr('Got TL')
-
     def get_waypoint_velocity(self, waypoint):
         return waypoint.twist.twist.linear.x
 
-    def set_waypoint_velocity(self, waypoints, waypoint, velocity):
-        waypoints[waypoint].twist.twist.linear.x = velocity
+    def set_waypoint_velocity(self, waypoints, wp_idx, velocity):
+        waypoints[wp_idx].twist.twist.linear.x = velocity
+     
 
     def distance(self, waypoints, wp1, wp2):
         dist = 0
@@ -149,15 +189,6 @@ class WaypointUpdater(object):
                 closest_wp_i = i
         return closest_wp_i
 
-    def convert_ego_to_vehicle(self, x_ego, y_ego, cos_yaw, sin_yaw, p_x, p_y):
-        x_trans = p_x - x_ego
-        y_trans = p_y - y_ego
-
-        x_veh   =  x_trans * cos_yaw + y_trans * sin_yaw 
-        y_veh   = -x_trans * sin_yaw + y_trans * cos_yaw 
-
-        return (x_veh, y_veh)
-
     def next_waypoint(self, pose, waypoints):
         closest_wp_i = self.closest_waypoint(pose, waypoints)
         map_x = waypoints[closest_wp_i].pose.pose.position.x
@@ -176,7 +207,7 @@ class WaypointUpdater(object):
             rospy.logerr('closest wp: {}; {}-{}'.format(closest_wp_i, waypoints[closest_wp_i].pose.pose.position.x, waypoints[closest_wp_i].pose.pose.position.y))
 
         if angle > (math.pi / 4):
-            closest_wp_i += 1
+            closest_wp_i = (closest_wp_i + 1) % len(waypoints)
             if DEBUG:
                 rospy.logerr('corrected wp: {}; {}-{}'.format(closest_wp_i, waypoints[closest_wp_i].pose.pose.position.x, waypoints[closest_wp_i].pose.pose.position.y))
 

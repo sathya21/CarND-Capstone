@@ -66,6 +66,8 @@ class DBWNode(object):
         rospy.Subscriber('/current_velocity', TwistStamped, self.vel_cb)
         self.dbw_enabled = True
         rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_cb)
+        self.is_signal_red = False
+        rospy.Subscriber('/is_signal_red', Bool, self.light_cb)
         self.time_last_sample = rospy.rostime.get_time()
 
         self.loop()
@@ -85,25 +87,41 @@ class DBWNode(object):
                   if DEBUG:
                     rospy.logerr('throttle: {}, brake: {}'.format(throttle, brake))
                   self.publish(throttle, brake, steer)
+                else:
+                  self.controller.pid_reset()
             rate.sleep()
 
     def publish(self, throttle, brake, steer):
         tcmd = ThrottleCmd()
-        tcmd.enable = True
+        tcmd.enable = False
         tcmd.pedal_cmd_type = ThrottleCmd.CMD_PERCENT
-        tcmd.pedal_cmd = throttle
-        self.throttle_pub.publish(tcmd)
+        bcmd = BrakeCmd()
+        bcmd.enable = False
+        bcmd.pedal_cmd_type = BrakeCmd.CMD_TORQUE
+
+        if (throttle > 0.0):
+            tcmd.enable = True
+        elif (brake != 0.0):
+            # only brake for traffic light. Otherwise bleed off speed by lifting throttle only
+            if (self.is_signal_red):
+                bcmd.enable = True
+
+        # if we are almost stopped (~1.5 mph), fully engage brakes and keep engaged
+        if (self.cur_velocity.twist.linear.x < 0.6) and (self.is_signal_red):
+            brake = -20000
+            bcmd.enable = True
+
+        if (bcmd.enable):
+            bcmd.pedal_cmd = brake
+            self.brake_pub.publish(bcmd)
+        elif (tcmd.enable):
+            tcmd.pedal_cmd = throttle
+            self.throttle_pub.publish(tcmd)
 
         scmd = SteeringCmd()
         scmd.enable = True
         scmd.steering_wheel_angle_cmd = steer
         self.steer_pub.publish(scmd)
-
-        bcmd = BrakeCmd()
-        bcmd.enable = True
-        bcmd.pedal_cmd_type = BrakeCmd.CMD_TORQUE
-        bcmd.pedal_cmd = brake
-        self.brake_pub.publish(bcmd)
 
     def pose_cb(self, msg):
         self.cur_pose = msg
@@ -118,6 +136,9 @@ class DBWNode(object):
     def dbw_cb(self, msg):
         if msg != None:
             self.dbw_enabled = msg.data
+
+    def light_cb(self, msg):
+        self.is_signal_red = msg.data
 
     def control_precheck(self):
         if self.twist_cmd != None and self.cur_pose != None and self.cur_velocity != None:
